@@ -14,12 +14,12 @@ export async function main(op: number, body?: any) {
     try {
         switch (op) {
             case 1:
-                const lista = await comida.find().select({_id: 0, __v:0}).lean();
+                const lista = await comida.find().select({__v:0}).lean();
                 //console.log("puxaro a lista");
                 return lista;
 
             case 2:
-                const comidaNova = new comida(body)
+                const comidaNova = new comida(body);
                 const comidaSalva = await comidaNova.save();
                 //console.log("colocaro comida nova");
                 return comidaSalva._id;
@@ -28,6 +28,16 @@ export async function main(op: number, body?: any) {
                 const comidaPedida = await comida.findById(body).select({__v:0}).lean();
                 //console.log("puxaro comida");
                 return comidaPedida;
+
+            case 4:
+                const comidaAtualizada = await comida.findByIdAndUpdate(body.id, body.bodi, {returnDocument: 'after'}).select({__v:0}).lean();
+                //console.log("mudaro comida");
+                return comidaAtualizada;
+
+            case 5:
+                const deletou = await comida.deleteMany(body)
+                //console.log("deletaram comidas");
+                return deletou;
         
             default:
                 console.log("fez caca");
