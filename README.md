@@ -11,7 +11,7 @@ idéia = estoque de comida (ferrece, não pensei em algo melhor)
 
 atual:<br>
 não marquei o que fiz sexta XD<br>
-[x] - fazer .ven e .gitignore;<br>
+[x] - fazer .env e .gitignore;<br>
 [x] - arrumar o post;<br>
 [x] - fazer um readme pro primeiro commit;<br>
 
