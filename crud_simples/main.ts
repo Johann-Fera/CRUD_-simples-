@@ -1,41 +1,96 @@
-import express, { type Express, type Request, type Response } from 'express';
-import { main, connectdb } from './repository.ts';
+import express, { type Express, type Request, type Response, type NextFunction } from 'express';
+import { main, connectdb, disconnectFromMongoDB } from './repository.ts';
+import type { QueryFilter } from "npm:mongoose";
 
 const app: Express = express();
 const port = 3000;
 
 connectdb();
 
+interface Comida {
+  _id: string;
+  nome: string;
+  quantidade: number;
+}
+
 app.use(express.json());
 
 app.get('/', async (req: Request, res: Response) => {
-  const dados = await main(1);
-  //console.log("vezes que pediro uma lista: " + counter1);
-  res.json(dados);
+  console.log(req.query);
+  const {_id, nome, quantidade} = req.query;
+  const filter : QueryFilter<Comida> = {};
+  if (_id) filter._id = _id;
+  if (nome) filter.nome = nome;
+  if (quantidade) filter.quantidade = quantidade;
+  const dados = await main(1,filter);
+  console.log(dados);
+  res.send(dados);
 });
+
+app.post('/comida', 
+  (req: Request, res: Response, next: NextFunction) => {
+    if (typeof req.body.nome === "string") {
+      let semEspaco: string = req.body.nome;
+      semEspaco = semEspaco.trim();
+      if (semEspaco != "") {
+        next();
+      } else res.send("nome inválido");
+    } else res.send("nome inválido");
+  },
+  (req: Request, res: Response, next: NextFunction) => {
+    if (typeof req.body.quantidade === "number") {
+      if (req.body.quantidade >= 0) {
+        next('route');
+      } else res.send("quantidade inválida");
+    } else res.send("quantidade inválida");
+    
+  },
+);
 
 app.post('/comida', async (req: Request, res: Response) => {
   const dados = await main(2,req.body);
-  //console.log("vezes que mandaro algo: " + counter2);
   res.json(dados);
 });
 
-app.get('/:id', async (req: Request, res: Response) => {
-  const dados = await main(3,req.params.id);
-  //console.log("vezes que pediram por id: " + counter3);
-  res.json(dados);
-});
+app.put('/comida/:id', 
+  (req: Request, res: Response, next: NextFunction) => {
+    if (typeof req.body.nome === "string") {
+      let semEspaco: string = req.body.nome;
+      semEspaco = semEspaco.trim();
+      if (semEspaco != "") {
+        next();
+      } else res.send("nome inválido");
+    } else res.send("nome inválido");
+  },
+  (req: Request, res: Response, next: NextFunction) => {
+    if (typeof req.body.quantidade === "number") {
+      if (req.body.quantidade >= 0) {
+        next('route');
+      } else res.send("quantidade inválida");
+    } else res.send("quantidade inválida");
+    
+  }
+);
 
 app.put('/comida/:id', async (req: Request, res: Response) => {
-  const dados = await main(4,{id: req.params.id, bodi: req.body});
-  //console.log("vezes que atualizaram algo: " + counter4);
+  const dados = await main(3,{id: req.params.id, bodi: req.body});
   res.json(dados);
 });
 
 app.delete('/comida', async (req: Request, res: Response) => {
-  const dados = await main(5,{nome: req.query.nome, quantidade: req.query.qtd});
-  //console.log("vezes que deletaram coisas: " + counter5);
-  res.send("deletado");
+  const dados = await main(4,{nome: req.query.nome, quantidade: req.query.qtd});
+  res.send(dados);
+});
+
+
+//só para eu desconectar do banco
+app.get('/d', async (req: Request, res: Response) => {
+  await disconnectFromMongoDB();
+  res.send("desconectado")
+});
+
+app.use((req: Request, res: Response) => {
+  res.send("não tem esse metodo para esse endpoint")
 });
 
 app.listen(port, () => {
