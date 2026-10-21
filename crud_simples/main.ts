@@ -1,84 +1,80 @@
 import express, { type Express, type Request, type Response, type NextFunction } from 'express';
-import { main, connectdb, disconnectFromMongoDB } from './repository.ts';
-import type { QueryFilter } from "npm:mongoose";
+import { connectdb, disconnectFromMongoDB, findQuery, saveComida, updateComId, deleteQuery, transferirExpirada } from './repository.ts';
+import type { QueryFilter } from "mongoose";
+import { Comida } from "./interfaces.ts";
+import comida from "./models/comida.ts"
 
 const app: Express = express();
 const port = 3000;
 
 connectdb();
 
-interface Comida {
-  _id: string;
-  nome: string;
-  quantidade: number;
-}
-
 app.use(express.json());
 
+const nomeChecker = function (req: Request, res: Response, next: NextFunction) {
+  if (req.method == 'PUT' && !req.body.nome) {
+    next();
+  } else{
+    if (typeof req.body.nome === "string") {
+        let semEspaco: string = req.body.nome;
+        semEspaco = semEspaco.trim();
+        if (semEspaco != "") {
+          next();
+        } else res.send("nome inválido");
+      } else res.send("nome inválido");
+  }
+};
+
+const qtdChecker = function (req: Request, res: Response, next: NextFunction) {
+  if (req.method == 'PUT' && !req.body.quantidade) {
+    next();
+  } else {
+    if (typeof req.body.quantidade === "number") {
+      if (req.body.quantidade >= 0) {
+        next();
+      } else res.send("quantidade inválida");
+    } else res.send("quantidade inválida");
+  }
+};
+
 app.get('/', async (req: Request, res: Response) => {
-  console.log(req.query);
-  const {_id, nome, quantidade} = req.query;
-  const filter : QueryFilter<Comida> = {};
+  const {_id, nome, quantidade, validade} = req.query;
+  const filter : QueryFilter<typeof comida> = {};
   if (_id) filter._id = _id;
   if (nome) filter.nome = nome;
   if (quantidade) filter.quantidade = quantidade;
-  const dados = await main(1,filter);
-  console.log(dados);
+  if (validade) filter.validade = validade;
+  const dados = await findQuery(filter);
   res.send(dados);
 });
 
-app.post('/comida', 
-  (req: Request, res: Response, next: NextFunction) => {
-    if (typeof req.body.nome === "string") {
-      let semEspaco: string = req.body.nome;
-      semEspaco = semEspaco.trim();
-      if (semEspaco != "") {
-        next();
-      } else res.send("nome inválido");
-    } else res.send("nome inválido");
-  },
-  (req: Request, res: Response, next: NextFunction) => {
-    if (typeof req.body.quantidade === "number") {
-      if (req.body.quantidade >= 0) {
-        next('route');
-      } else res.send("quantidade inválida");
-    } else res.send("quantidade inválida");
-    
-  },
-);
-
-app.post('/comida', async (req: Request, res: Response) => {
-  const dados = await main(2,req.body);
+app.post('/comida', nomeChecker, qtdChecker, async (req: Request, res: Response) => {
+  const novaComida: Comida = req.body;
+  const dados = await saveComida(novaComida);
+  console.log("dados:" + dados);
+  
   res.json(dados);
 });
 
-app.put('/comida/:id', 
-  (req: Request, res: Response, next: NextFunction) => {
-    if (typeof req.body.nome === "string") {
-      let semEspaco: string = req.body.nome;
-      semEspaco = semEspaco.trim();
-      if (semEspaco != "") {
-        next();
-      } else res.send("nome inválido");
-    } else res.send("nome inválido");
-  },
-  (req: Request, res: Response, next: NextFunction) => {
-    if (typeof req.body.quantidade === "number") {
-      if (req.body.quantidade >= 0) {
-        next('route');
-      } else res.send("quantidade inválida");
-    } else res.send("quantidade inválida");
-    
-  }
-);
+app.post('/comida/expirou', async (req: Request, res: Response) => {
 
-app.put('/comida/:id', async (req: Request, res: Response) => {
-  const dados = await main(3,{id: req.params.id, bodi: req.body});
+  const dados = await transferirExpirada(req.body);
+  res.send(dados);
+});
+
+app.put('/comida/:id', nomeChecker, qtdChecker, async (req: Request, res: Response) => {
+  const dados = await updateComId(req.params.id, req.body);
   res.json(dados);
 });
 
 app.delete('/comida', async (req: Request, res: Response) => {
-  const dados = await main(4,{nome: req.query.nome, quantidade: req.query.qtd});
+  const {id, nome, qtd, validade} = req.query;
+  const filter : QueryFilter<typeof comida> = {};
+  if (id) filter.id = id;
+  if (nome) filter.nome = nome;
+  if (qtd) filter.quantidade = qtd;
+  if (validade) filter.validade = validade;
+  const dados = await deleteQuery(filter);
   res.send(dados);
 });
 

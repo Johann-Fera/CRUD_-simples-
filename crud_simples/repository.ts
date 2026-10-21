@@ -1,6 +1,7 @@
-import mongoose, { connect } from 'mongoose';
+import mongoose, { connect, QueryFilter } from 'mongoose';
 import comida from './models/comida.ts';
 import { log } from "node:console";
+import { Comida, OpTransfer } from "./interfaces.ts";
 
 
 export async function connectdb() {
@@ -10,40 +11,63 @@ export async function connectdb() {
     console.log(`✅ Conectado com sucesso ao banco: ${mongoose.connection.name}`);
 }
 
-export async function main(op: number, body?: any) {
+export async function findQuery(query: QueryFilter<typeof comida>) {
     try {
-        switch (op) {
-            case 1:{
-                const lista = await comida.find(body).select({__v:0}).lean();
-                //console.log("puxaro a lista");
-                return lista;
-            }
+        const lista:Comida[] = await comida.find(query).select({__v:0}).lean();
+        return lista;
+    } catch (error) {
+        console.dir(error);
+    }
+}
 
-            case 2:{
-                const comidaNova = new comida(body);
-                const comidaSalva = await comidaNova.save();
-                //console.log("colocaro comida nova");
-                return comidaSalva._id;
-            }
+export async function saveComida(body: Comida) {
+    try {
+        const comidaNova = new comida(body);
+        const comidaSalva:Comida = await comidaNova.save();
+        console.log("comidasalva:" + comidaSalva);
+        return comidaSalva._id;
+    } catch (error) {
+        console.dir(error);
+    }
+}
 
-            case 3:{
-                const comidaAtualizada = await comida.findByIdAndUpdate(body.id, body.bodi, {returnDocument: 'after'}).select({__v:0}).lean();
-                //console.log("mudaro comida");
-                return comidaAtualizada;
-            }
+export async function updateComId(id: string, body: Comida) {
+    try {
+        const comidaAtualizada:Comida | null = await comida
+        .findByIdAndUpdate(id, body, {returnDocument: 'after', runValidators: true})
+        .select({__v:0})
+        .lean();
+        return comidaAtualizada;
+    } catch (error) {
+        console.dir(error);
+    }
+}
 
-            case 4:{
-                const deletou = await comida.deleteMany(body)
-                //console.log("deletaram comidas");
-                return deletou;
-            }
-        
-            default:
-                console.log("fez caca");
-                return
-        }
-    } catch (err) {
-        console.dir(err);
+export async function deleteQuery(query: QueryFilter<typeof comida>) {
+    try {
+        const deletou = await comida.deleteMany(query);
+        return deletou;
+    } catch (error) {
+        console.dir(error);
+    }
+}
+
+export async function transferirExpirada(transfer: OpTransfer) {
+    try {
+        const comidaDV = await comida.findById(transfer.id_dv);
+        const comidaFV = await comida.findById(transfer.id_fv);
+        if (!comidaDV) throw new Error("não encontrou comida dentro da validade com esse id");
+        if (!comidaFV) throw new Error("não encontrou comida fora da validade com esse id");
+        if (comidaDV.quantidade < transfer.qtd) throw new Error("não é possivel transferir mais do que tem");
+        comidaDV.quantidade = comidaDV.quantidade - transfer.qtd;
+        comidaFV.quantidade = comidaFV.quantidade + transfer.qtd;
+        await mongoose.connection.transaction(async (session) => {
+            await comidaDV.save({ session });
+            await comidaFV.save({ session });
+        });
+        return "transação feita";
+    } catch (error) {
+        return "deu errado" + error;
     }
 }
 
