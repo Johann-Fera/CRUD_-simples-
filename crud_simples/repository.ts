@@ -6,7 +6,6 @@ import { Comida, OpTransfer } from "./interfaces.ts";
 
 export async function connectdb() {
     const dburl = Deno.env.get("DB_URL");
-    //console.log("url ai -> " + dburl);
     await mongoose.connect(`${dburl}`);
     console.log(`✅ Conectado com sucesso ao banco: ${mongoose.connection.name}`);
 }
@@ -24,7 +23,6 @@ export async function saveComida(body: Comida) {
     try {
         const comidaNova = new comida(body);
         const comidaSalva:Comida = await comidaNova.save();
-        console.log("comidasalva:" + comidaSalva);
         return comidaSalva._id;
     } catch (error) {
         console.dir(error);

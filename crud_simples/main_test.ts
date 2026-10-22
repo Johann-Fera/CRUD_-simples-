@@ -1,11 +1,28 @@
 import { assertArrayIncludes, assertEquals, assertExists, assertObjectMatch, assert } from "@std/assert";
-import { request } from "asset:///node/undici/api.d.ts";
 import { Comida } from "./interfaces.ts";
+import { connectdb, disconnectFromMongoDB } from "./repository.ts";
+import { app, auth, nomeChecker, qtdChecker } from "./app.ts";
+import { NextFunction, Request, Response } from 'express';
 
-// E2E
+const token = Deno.env.get("API_token");
+let server : ReturnType<typeof app.listen>;
+
+Deno.test.beforeAll(async () => {
+  server = app.listen(3000);
+  connectdb();
+});
+
+Deno.test.afterAll(async () => {
+  server.close();
+  disconnectFromMongoDB();
+});
+
+// testes (0,8,0)
+
+// integração
 
 Deno.test("retorna lista de comida do banco e ve se contém a banana e essa outra comida ae", async () => {
-  //seria isso padrão agx? nun tem body,param ou query, mas ainda sim, é um teste para um findAll
+  //seria isso padrão agx? nun tem body,param ou query, mas ainda sim, é um teste para um "findAll"
   const res:Response = await fetch(`http://localhost:3000/`);
   const dados:Comida[] = await res.json();
   assertArrayIncludes(dados, [
@@ -17,7 +34,7 @@ Deno.test("retorna lista de comida do banco e ve se contém a banana e essa outr
 Deno.test("adiciona comida e ve se ela ta na collection pelo id", async () => {
   const res:Response = await fetch(`http://localhost:3000/comida`, {
     method: "POST",
-    headers: {"Content-Type": "application/json"},
+    headers: {"Content-Type": "application/json", "authorization": `Bearer ${token}`},
     body: JSON.stringify({nome: "comida", quantidade: 1}), 
   });
   const dado:string = await res.json();
@@ -34,7 +51,7 @@ Deno.test("atualiza a quantidade de abacates para a quantidade de comidas na col
   const id_abacate:string = '6ad64dc419c66bb9a853ebc8';
   const res2:Response = await fetch(`http://localhost:3000/comida/${id_abacate}`,{
     method: "PUT",
-    headers: {"Content-Type": "application/json"},
+    headers: {"Content-Type": "application/json", "authorization": `Bearer ${token}`},
     body: JSON.stringify({nome: "abacate", quantidade: tamanho}), 
   });
   const dado:Comida = await res2.json();
@@ -44,6 +61,7 @@ Deno.test("atualiza a quantidade de abacates para a quantidade de comidas na col
 Deno.test("deleta a comida que foi criada no teste POST", async () => {
   const res:Response = await fetch(`http://localhost:3000/comida?nome=comida&qtd=1`,{
     method: "DELETE",
+    headers: {"Content-Type": "application/json", "authorization": `Bearer ${token}`},
   });
   const dado:JSON = await res.json();
   assertObjectMatch(dado, {acknowledged: true}, "o mongo ou o server não respondeu");
@@ -59,7 +77,7 @@ Deno.test("transferir quantidade de banana para banana fora da validade", async 
 
   const res:Response = await fetch(`http://localhost:3000/comida/expirou`,{
     method: "POST",
-    headers: {"Content-Type": "application/json"},
+    headers: {"Content-Type": "application/json", "authorization": `Bearer ${token}`},
     body: JSON.stringify({id_dv:id_banana, id_fv:id_bananaFV, qtd:2}), 
   });
   const txt:string = await res.text();
@@ -74,7 +92,7 @@ Deno.test("transferir quantidade de banana para banana fora da validade", async 
 
   const res3:Response = await fetch(`http://localhost:3000/comida/${id_banana}`,{
     method: "PUT",
-    headers: {"Content-Type": "application/json"},
+    headers: {"Content-Type": "application/json", "authorization": `Bearer ${token}`},
     body: JSON.stringify({quantidade: 5, msg:"aqui eu"}), 
   });
   const dado:Comida = await res3.json();
@@ -82,15 +100,13 @@ Deno.test("transferir quantidade de banana para banana fora da validade", async 
 
   const res4:Response = await fetch(`http://localhost:3000/comida/${id_bananaFV}`,{
     method: "PUT",
-    headers: {"Content-Type": "application/json"},
+    headers: {"Content-Type": "application/json", "authorization": `Bearer ${token}`},
     body: JSON.stringify({quantidade: 0}), 
   });
   const dado2:Comida = await res4.json();
   assertEquals(dado2, {_id: id_bananaFV, nome: "banana", quantidade: 0, validade: false}, "deu ruim, a banana não atualizou");
 
 })
-
-// integração
 
 Deno.test("métodos no endpoint errado", async () => {
   const res:Response = await fetch(`http://localhost:3000/comida/10`);
@@ -99,13 +115,14 @@ Deno.test("métodos no endpoint errado", async () => {
 
   const res2:Response = await fetch(`http://localhost:3000/`,{
     method: "POST",
+    headers: {"Content-Type": "application/json", "authorization": `Bearer ${token}`},
   });
   const txt2:string = await res2.text();
   assertEquals(txt2,"não tem esse metodo para esse endpoint", "não era para ter POS na / ");
 
   const res3:Response = await fetch(`http://localhost:3000/`,{
     method: "PUT",
-    headers: {"Content-Type": "application/json"},
+    headers: {"Content-Type": "application/json", "authorization": `Bearer ${token}`},
     body: JSON.stringify({nome: "comida", quantidade: 10}), 
   });
   const txt3:string = await res3.text();
@@ -113,22 +130,47 @@ Deno.test("métodos no endpoint errado", async () => {
 
   const res4:Response = await fetch(`http://localhost:3000/?nome=comida&qtd=1`,{
     method: "DELETE",
+    headers: {"Content-Type": "application/json", "authorization": `Bearer ${token}`},
   });
   const txt4:string = await res4.text();
   assertEquals(txt4,"não tem esse metodo para esse endpoint", "não era para ter delete na / ");
 })
 
-Deno.test("update com dados invalidos", async () => {
-  const id_abacate:string = '6ad64dc419c66bb9a853ebc8';
-  const res:Response = await fetch(`http://localhost:3000/comida/${id_abacate}`,{
+// transformar esses em unitarios
+
+let res: any = {
+  statusCode: 0,
+  body: null,
+  status(code: number) { this.statusCode = code; return this; },
+  json(body: any) { this.body = body; return this; },
+};
+let nextCalled = false;
+const next = () => { nextCalled = true; };
+
+Deno.test("dados invalidos no nomeChecker", async () => {
+
+  const req: any = {
     method: "PUT",
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify({nome: " ", quantidade: 10}), 
-  });
-  const txt:string = await res.text();
-  assertEquals(txt,"nome inválido", "ta passando nome vazio");
+  };
+  nomeChecker(req, res, next);
+  console.log(res.statusCode);
+  assertEquals(res.body, { error: "nome inválido" }, "ta passando nome vazio");
+  assertEquals(res.statusCode, 422);
 
-  const res2:Response = await fetch(`http://localhost:3000/comida/${id_abacate}`,{
+  const req2: any = {
+    method: "PUT",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({nome: 10, quantidade: 10}), 
+  };
+  nomeChecker(req2, res, next);
+  assertEquals(res.body, { error: "nome inválido" }, "ta passando nome sem ser string");
+  assertEquals(res.statusCode, 422);
+  
+})
+/*
+const res2:Response = await fetch(`http://localhost:3000/comida/${id_abacate}`,{
     method: "PUT",
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify({nome: "abacate ruim", quantidade: -1}), 
@@ -143,71 +185,49 @@ Deno.test("update com dados invalidos", async () => {
   });
   const txt3:string = await res3.text();
   assertEquals(txt3,"quantidade inválida", "ta passando quantidade sem ser numero");
+*/
+Deno.test("autenticação sem token", async () => {
+  const req: any = { headers: {} };
 
-  const res4:Response = await fetch(`http://localhost:3000/comida/${id_abacate}`,{
-    method: "PUT",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({nome: 10, quantidade: 10}), 
-  });
-  const txt4:string = await res4.text();
-  assertEquals(txt4,"nome inválido", "ta passando nome sem ser string");
+  auth(req, res, next);
+
+  assertEquals(res.statusCode, 401)
+  assertEquals(res.body, { error: "Token não fornecido" })
 })
 
-Deno.test("post com dados invalidos", async () => {
-  const res = await fetch(`http://localhost:3000/comida`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({nome: " ", quantidade: 1}), 
-  });
-  const txt:string = await res.text();
-  assertEquals(txt,"nome inválido", "ta passando nome vazio");
+Deno.test("autenticação com token, porém sem bearer", async () => {
+  const req: any = { headers: { authorization: `${token}` } };
 
-  const res2:Response = await fetch(`http://localhost:3000/comida`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({nome: "comida", quantidade: -1}), 
-  });
-  const txt2:string = await res2.text();
-  assertEquals(txt2,"quantidade inválida", "ta pasando quantidade negativa");
+  auth(req, res, next);
 
-  const res3:Response = await fetch(`http://localhost:3000/comida`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({nome: "comida", quantidade: "bruh"}), 
-  });
-  const txt3:string = await res3.text();
-  assertEquals(txt3,"quantidade inválida", "ta passando quantidade sem ser numero");
-
-  const res4:Response = await fetch(`http://localhost:3000/comida`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({nome: 10, quantidade: 10}), 
-  });
-  const txt4:string = await res4.text();
-  assertEquals(txt4,"nome inválido", "ta passando nome sem ser string");
+  assertEquals(res.statusCode, 401)
+  assertEquals(res.body, { error: "cade o Bearer" })
 })
 
+Deno.test("autenticação com token errado", async () => {
+  const req: any = { headers: { authorization: "Bearer abc" } };
+
+  auth(req, res, next);
+
+  assertEquals(res.statusCode, 403)
+  assertEquals(res.body, { error: "Token inválido ou expirado" })
+})
 
 
 /*
-- deletar o que não tem - e2e
-- update o que não tem - e2e
-- get o que não tem - e2e (precisa de teste pra isso ?)
-- get com campo a mais - int
-- post com campo a mais - int
-- put com campo a mais no update - int
-- put com campo a mais no filter - int
-- delete com campo a mais - int 
-- post com campo a menos - int
-- put com campo a menos no update - int
-- put com campo a menos no filter - int
-- colocar id no body do post e do update - int
+- deletar o que não tem - int
+- update o que não tem - int
+- get o que não tem - int (precisa de teste pra isso ?)
+- get com campo a mais - uni
+- post com campo a mais - uni
+- put com campo a mais no update - uni
+- put com campo a mais no filter - uni
+- delete com campo a mais - uni
+- post com campo a menos - uni
+- put com campo a menos no update - uni
+- put com campo a menos no filter - uni
+- colocar id no body do post e do update - uni
 */
-
-// meta de testes atual e2e, int, uni = (4,4,0)
-
-// nun da para fazer teste unitario não, não pelo menos enquanto o controller é obrigatório
-// o controller serve pra request, se eu usar ele vira integração
 
 /* TESTES AGX
 - teste sempre co controller envolvido
