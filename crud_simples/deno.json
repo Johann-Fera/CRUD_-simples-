@@ -7,6 +7,8 @@
     "bcryptjs": "npm:bcryptjs@^3.0.3",
     "express": "npm:express@^5.3.0",
     "jsonwebtoken": "npm:jsonwebtoken@^9.0.3",
-    "mongoose": "npm:mongoose@^9.11.2"
+    "mongoose": "npm:mongoose@^9.11.2",
+    "request-check": "npm:request-check@^1.6.2",
+    "responser": "npm:responser@^2.5.6"
   }
 }

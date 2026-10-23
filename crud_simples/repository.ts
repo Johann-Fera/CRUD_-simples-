@@ -1,6 +1,5 @@
-import mongoose, { connect, QueryFilter } from 'mongoose';
+import mongoose, { QueryFilter } from 'mongoose';
 import comida from './models/comida.ts';
-import { log } from "node:console";
 import { Comida, OpTransfer } from "./interfaces.ts";
 
 
@@ -54,6 +53,7 @@ export async function transferirExpirada(transfer: OpTransfer) {
     try {
         const comidaDV = await comida.findById(transfer.id_dv);
         const comidaFV = await comida.findById(transfer.id_fv);
+        // sera que dava para fazer isso no app.ts? e request-check?
         if (!comidaDV) throw new Error("não encontrou comida dentro da validade com esse id");
         if (!comidaFV) throw new Error("não encontrou comida fora da validade com esse id");
         if (comidaDV.quantidade < transfer.qtd) throw new Error("não é possivel transferir mais do que tem");

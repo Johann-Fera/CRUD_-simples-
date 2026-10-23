@@ -1,64 +1,63 @@
 import express, { type Express, type Request, type Response, type NextFunction } from 'express';
-import { connectdb, disconnectFromMongoDB, findQuery, saveComida, updateComId, deleteQuery, transferirExpirada } from './repository.ts';
+import { findQuery, saveComida, updateComId, deleteQuery, transferirExpirada } from './repository.ts';
 import type { QueryFilter } from "mongoose";
 import { Comida } from "./interfaces.ts";
 import comida from "./models/comida.ts"
 import jwt from "jsonwebtoken";
+import responser from "responser";
+import requestCheck from "request-check";
 
 export const app: Express = express();
 
 const secret = Deno.env.get("JWT_secret");
 
+app.use((responser as any).default);
 app.use(express.json());
-
-// coloca um return, eles ajuda a para depois de um res.send ou next(), melhor que enche de if()
+const rc = (requestCheck as any).default();
 
 export const nomeChecker = function (req: Request, res: Response, next: NextFunction) {
-  console.log("aqui");
-  if (req.method == 'PUT' && !req.body.nome) {
-    console.log(!req.body.nome);
-    console.log(req.body.nome);
-    console.log("aqui2");
-    next();
-  } else{
-    console.log("aqui3");
-    if (typeof req.body.nome === "string") {
-      console.log("aqui4");
-        let semEspaco: string = req.body.nome;
-        semEspaco = semEspaco.trim();
-        if (semEspaco != "") {
-          console.log("aqui5");
-          next();
-        } else return res.status(400).json({ error: "nome inválido" });
-      } else return res.status(400).json({ error: "nome inválido" });
+  const nome = req.body.nome;
+  if (req.method == 'PUT' && !nome) return next();
+  /*
+  rc.addRule('nome', {
+    validator: (nome:any) => typeof nome != "string",
+    message: 'o nome deve ser String',
+  },{
+    validator: (nome:string) => nome.trim() == "",
+    message: 'o nome não deve ser vazio',
+  })
+  const errors = rc.check({nome});
+  if (errors) {
+    //talvez tenha que verifica esses "errors" nos testes
+    return res.send_unprocessableEntity("nome inválido",errors);
   }
+  return next();
+  */
+  
+  if (typeof nome === "string") {
+    let semEspaco: string = nome;
+    semEspaco = semEspaco.trim();
+    if (semEspaco != "") return next();
+  } 
+  return res.send_unprocessableEntity("nome inválido");
 };
 
 export const qtdChecker = function (req: Request, res: Response, next: NextFunction) {
-  console.log("aqui");
-  if (req.method == 'PUT' && !req.body.quantidade) {
-    console.log("aqui2");
-    next();
-  } else {
-    console.log("aqui3");
-    if (typeof req.body.quantidade === "number") {
-      console.log("aqui4");
-      if (req.body.quantidade >= 0) {
-        console.log("aqui5");
-        next();
-      } else res.status(422).json({ error: "quantidade inválida" });
-    } else res.status(422).json({ error: "quantidade inválida" });
+  if (req.method == 'PUT' && !req.body.quantidade) return next();
+  if (typeof req.body.quantidade === "number") {
+    if (req.body.quantidade >= 0) return next();
   }
+  return res.send_unprocessableEntity("quantidade inválida");
 };
 
 export const auth = function (req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
   if (!header) {
-    return res.status(401).json({ error: "Token não fornecido" });
+    return res.send_unauthorized("Token não fornecido");
   }
 
   if (!header.includes("Bearer")) {
-    return res.status(401).json({ error: "cade o Bearer" });
+    return res.send_unauthorized("sem Bearer");
   }
   const token = header.replace("Bearer ", "");
 
@@ -67,17 +66,16 @@ export const auth = function (req: Request, res: Response, next: NextFunction) {
     req.auto = payload; 
     return next();
   } catch (err) {
-    return res.status(403).json({ error: "Token inválido ou expirado" });
+    return res.send_unauthorized("Token inválido ou expirado");
   }
 }
 
 export const autoADM = function(req: Request, res: Response, next: NextFunction) {
-  
     if (!req.auto?.role) {
-      return res.status(403).json({ error: "Sem permissão" });
+      return res.send_forbidden("Sem permissão");
     }
     if (req.auto.role != "admin") {
-      return res.status(403).json({ error: "Sem permissão" });
+      return res.send_forbidden("Sem permissão");
     }
     return next();
 }
@@ -90,25 +88,23 @@ app.get('/', async (req: Request, res: Response) => {
   if (quantidade) filter.quantidade = quantidade;
   if (validade) filter.validade = validade;
   const dados = await findQuery(filter);
-  res.send(dados);
+  res.send_ok("comidas retornadas", dados);
 });
 
 app.post('/comida', auth, nomeChecker, qtdChecker, async (req: Request, res: Response) => {
   const novaComida: Comida = req.body;
   const dados = await saveComida(novaComida);
-  
-  res.json(dados);
+  res.send_created("comidas criada", dados);
 });
 
 app.post('/comida/expirou', auth, autoADM, async (req: Request, res: Response) => {
-
   const dados = await transferirExpirada(req.body);
-  res.send(dados);
+  res.send_accepted ("transferencia feita", dados);
 });
 
 app.put('/comida/:id', auth, autoADM, nomeChecker, qtdChecker, async (req: Request, res: Response) => {
   const dados = await updateComId(req.params.id, req.body);
-  res.json(dados);
+  res.send_ok("comidas atualizada", dados);
 });
 
 app.delete('/comida', auth, autoADM, async (req: Request, res: Response) => {
@@ -119,9 +115,9 @@ app.delete('/comida', auth, autoADM, async (req: Request, res: Response) => {
   if (qtd) filter.quantidade = qtd;
   if (validade) filter.validade = validade;
   const dados = await deleteQuery(filter);
-  res.send(dados);
+  res.send_noContent("comidas deletada", dados);
 });
 
 app.use((req: Request, res: Response) => {
-  res.send("não tem esse metodo para esse endpoint")
+  res.send_methodNotAllowed("não tem esse metodo para esse endpoint");
 });
