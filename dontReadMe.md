@@ -7,28 +7,29 @@ repository guy: mongoose - repository.ts<br>
 model guy: mongoose - pasta model<br>
 DTO guy: typescript - interfaces.ts<br>
 
-idéia = estoque de comida (ferrece, não pensei em algo melhor)
+idéia = estoque de comida
 
 atual:<br>
-[x] - ARRUMAR TESTES<br>
-[x] - implementar responser<br>
+[x] - implementar request-check em queries e body<br>
 
 proximo:<br>
-[_] - implementar request-check<br>
 [ ] - implementar morgan<br>
 [ ] - implementar isness<br>
-[ ] - implementar throwlhos<br>
+
 
 a fazer:<br>
+- implementar throwlhos<br>
+- teste de autorização (vai ter que criar otro token)<br>
 - colocar token reutilizável no postman<br>
 - listagem de endpoint, explicação e exemplo no postman<br>
 - listagem de endpoint, explicação e exemplo no readme<br>
+- descobrir como será a apresentação<br>
+- aumentar test coverage<br>
 - refazer com os padrões de codigo da AGX<br>
 
 
 parece extra:
-- teste de autorização (vai ter que criar otro token)<br>
-- garantir mais validação (validação nas rotas)<br>
-- teste de validação (teste uni de erro nas rotas)<br>
-- tabela output no responser sem o campo message, fala co zarco ou PR(vish)<br>
-- request-check "You can change the default required field message by adding (a this, <--- caught in 4K) line of code:"<br>
+- garantir mais validação no rc (id, validade e talvez mais pros nome e qtd)<br>
+- mais teste de validação (teste uni de erro nos middleware checkers)<br>
+- tabela output no site responser sem o campo message, fala co zarco ou PR(vish)<br>
+- site request-check "You can change the default required field message by adding (a this, <--- caught in 4K) line of code:"<br>

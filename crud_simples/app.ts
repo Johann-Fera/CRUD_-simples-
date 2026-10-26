@@ -1,11 +1,12 @@
 import express, { type Express, type Request, type Response, type NextFunction } from 'express';
 import { findQuery, saveComida, updateComId, deleteQuery, transferirExpirada } from './repository.ts';
 import type { QueryFilter } from "mongoose";
-import { Comida } from "./interfaces.ts";
+import { OpTransfer } from "./interfaces.ts";
 import comida from "./models/comida.ts"
 import jwt from "jsonwebtoken";
 import responser from "responser";
 import requestCheck from "request-check";
+import { rc } from "./rq-ck.ts";
 
 export const app: Express = express();
 
@@ -13,60 +14,46 @@ const secret = Deno.env.get("JWT_secret");
 
 app.use((responser as any).default);
 app.use(express.json());
-const rc = (requestCheck as any).default();
 
 export const nomeChecker = function (req: Request, res: Response, next: NextFunction) {
-  const nome = req.body.nome;
-  if (req.method == 'PUT' && !nome) return next();
-  /*
-  rc.addRule('nome', {
-    validator: (nome:any) => typeof nome != "string",
-    message: 'o nome deve ser String',
-  },{
-    validator: (nome:string) => nome.trim() == "",
-    message: 'o nome não deve ser vazio',
-  })
+  let nome:string = req.body?.nome;
+  if (!nome) nome = req.query?.nome;
+  if ((req.method == 'GET' || req.method == 'PUT' || req.method == 'DELETE') && !nome) return next();
+  if (typeof nome != "string") return res.send_unprocessableEntity("nome inválido", [ { field: "nome", message: "o nome deve ser string" } ]);
   const errors = rc.check({nome});
   if (errors) {
-    //talvez tenha que verifica esses "errors" nos testes
     return res.send_unprocessableEntity("nome inválido",errors);
   }
   return next();
-  */
-  
-  if (typeof nome === "string") {
-    let semEspaco: string = nome;
-    semEspaco = semEspaco.trim();
-    if (semEspaco != "") return next();
-  } 
-  return res.send_unprocessableEntity("nome inválido");
 };
 
 export const qtdChecker = function (req: Request, res: Response, next: NextFunction) {
-  if (req.method == 'PUT' && !req.body.quantidade) return next();
-  if (typeof req.body.quantidade === "number") {
-    if (req.body.quantidade >= 0) return next();
+  let quantidade:number = req.body?.quantidade;
+  if (!quantidade) quantidade = req.query?.quantidade;
+  if ((req.method == 'GET' || req.method == 'PUT' || req.method == 'DELETE') && !quantidade) return next();
+  if (typeof quantidade != "number") return res.send_unprocessableEntity("quantidade inválida", [ { field: "quantidade", message: "a quantidade deve ser number" } ]);
+  const errors = rc.check({quantidade});
+  if (errors) {
+    return res.send_unprocessableEntity("quantidade inválida",errors);
   }
-  return res.send_unprocessableEntity("quantidade inválida");
+  return next();
 };
 
 export const auth = function (req: Request, res: Response, next: NextFunction) {
-  const header = req.headers.authorization;
-  if (!header) {
-    return res.send_unauthorized("Token não fornecido");
+  const header:string = req.headers.authorization;
+
+  const errors = rc.check({header});
+  if (errors) {
+    return res.send_unauthorized("autorização inválida",errors);
   }
 
-  if (!header.includes("Bearer")) {
-    return res.send_unauthorized("sem Bearer");
-  }
   const token = header.replace("Bearer ", "");
-
   try {
     const payload = jwt.verify(token, secret);
     req.auto = payload; 
     return next();
   } catch (err) {
-    return res.send_unauthorized("Token inválido ou expirado");
+    return res.send_unauthorized("Token inválido ou expirado",err);
   }
 }
 
@@ -80,7 +67,7 @@ export const autoADM = function(req: Request, res: Response, next: NextFunction)
     return next();
 }
 
-app.get('/', async (req: Request, res: Response) => {
+app.get('/', nomeChecker, qtdChecker, async (req: Request, res: Response) => {
   const {_id, nome, quantidade, validade} = req.query;
   const filter : QueryFilter<typeof comida> = {};
   if (_id) filter._id = _id;
@@ -91,23 +78,26 @@ app.get('/', async (req: Request, res: Response) => {
   res.send_ok("comidas retornadas", dados);
 });
 
-app.post('/comida', auth, nomeChecker, qtdChecker, async (req: Request, res: Response) => {
-  const novaComida: Comida = req.body;
+app.post('/comida', auth, autoADM, nomeChecker, qtdChecker, async (req: Request, res: Response) => {
+  const novaComida: typeof comida = req.body;
   const dados = await saveComida(novaComida);
   res.send_created("comidas criada", dados);
 });
 
-app.post('/comida/expirou', auth, autoADM, async (req: Request, res: Response) => {
-  const dados = await transferirExpirada(req.body);
+app.post('/comida/expirou', auth, qtdChecker, async (req: Request, res: Response) => {
+  const transfer: OpTransfer = req.body;
+  const dados = await transferirExpirada(transfer);
   res.send_accepted ("transferencia feita", dados);
 });
 
 app.put('/comida/:id', auth, autoADM, nomeChecker, qtdChecker, async (req: Request, res: Response) => {
-  const dados = await updateComId(req.params.id, req.body);
+  const comidaAtualizada: typeof comida = req.body;
+  const id: string = req.params.id;
+  const dados = await updateComId(id, comidaAtualizada);
   res.send_ok("comidas atualizada", dados);
 });
 
-app.delete('/comida', auth, autoADM, async (req: Request, res: Response) => {
+app.delete('/comida', auth, autoADM, nomeChecker, qtdChecker, async (req: Request, res: Response) => {
   const {id, nome, qtd, validade} = req.query;
   const filter : QueryFilter<typeof comida> = {};
   if (id) filter.id = id;
@@ -118,6 +108,6 @@ app.delete('/comida', auth, autoADM, async (req: Request, res: Response) => {
   res.send_noContent("comidas deletada", dados);
 });
 
-app.use((req: Request, res: Response) => {
+app.use((_req:Request, res: Response) => {
   res.send_methodNotAllowed("não tem esse metodo para esse endpoint");
 });

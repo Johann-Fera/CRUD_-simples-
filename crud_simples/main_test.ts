@@ -1,5 +1,4 @@
 import { assertArrayIncludes, assertEquals, assertExists, assertObjectMatch, assert } from "@std/assert";
-import { Comida } from "./interfaces.ts";
 import { connectdb, disconnectFromMongoDB } from "./repository.ts";
 import { app, auth, nomeChecker, qtdChecker } from "./app.ts";
 import { Response } from 'express';
@@ -82,13 +81,13 @@ Deno.test("transferir quantidade de banana para banana fora da validade", async 
   const id_banana:string = '6ad24d308a63f62d336c6c5c';
   const id_bananaFV:string = '6ad8bacaf600cfb744a03c2e';
 
-  const prep:Response = await fetch(`http://localhost:3000/comida/${id_banana}`,{
+  const _prep:Response = await fetch(`http://localhost:3000/comida/${id_banana}`,{
     method: "PUT",
     headers: {"Content-Type": "application/json", "authorization": `Bearer ${token}`},
     body: JSON.stringify({quantidade: 5}), 
   });
 
-  const prep2:Response = await fetch(`http://localhost:3000/comida/${id_bananaFV}`,{
+  const _prep2:Response = await fetch(`http://localhost:3000/comida/${id_bananaFV}`,{
     method: "PUT",
     headers: {"Content-Type": "application/json", "authorization": `Bearer ${token}`},
     body: JSON.stringify({quantidade: 0}), 
@@ -97,7 +96,7 @@ Deno.test("transferir quantidade de banana para banana fora da validade", async 
   const res:Response = await fetch(`http://localhost:3000/comida/expirou`,{
     method: "POST",
     headers: {"Content-Type": "application/json", "authorization": `Bearer ${token}`},
-    body: JSON.stringify({id_dv:id_banana, id_fv:id_bananaFV, qtd:2}), 
+    body: JSON.stringify({id_dv:id_banana, id_fv:id_bananaFV, quantidade:2}), 
   });
   const dados = await res.json();
   assertEquals(dados.message,"transferencia feita", "a transação não ocorreu");
@@ -150,7 +149,7 @@ Deno.test("métodos no endpoint errado", async () => {
 let nextCalled = false;
 const next = () => { nextCalled = true; };
 
-const req_proResponser: any = {};
+const req_proResponser = {};
 const next_proResponser = () => {} ;
 function mockRes() {
   const res: any = {
@@ -166,6 +165,7 @@ function mockRes() {
 const resResponser = mockRes();
 
 Deno.test("dados invalidos no nomeChecker", () => {
+  nextCalled = false;
   const req = {
     method: "PUT",
     headers: {"Content-Type": "application/json"},
@@ -174,7 +174,7 @@ Deno.test("dados invalidos no nomeChecker", () => {
   nomeChecker(req, resResponser, next);
   assertEquals(resResponser.body.message, "nome inválido", "ta passando nome vazio");
   assertEquals(resResponser.body.code, 422, "não ta retornando o código correto");
-  assertEquals(nextCalled, false);
+  assertEquals(nextCalled, false, "next foi chamado");
 
   const req2 = {
     method: "PUT",
@@ -184,10 +184,11 @@ Deno.test("dados invalidos no nomeChecker", () => {
   nomeChecker(req2, resResponser, next);
   assertEquals(resResponser.body.message, "nome inválido", "ta passando nome sem ser string");
   assertEquals(resResponser.body.code, 422, "não ta retornando o código correto");
-  assertEquals(nextCalled, false);
+  assertEquals(nextCalled, false, "next foi chamado");
 })
 
 Deno.test("dados invalidos no qtdChecker", () => {
+  nextCalled = false;
   const req = {
     method: "PUT",
     headers: {"Content-Type": "application/json"},
@@ -196,7 +197,7 @@ Deno.test("dados invalidos no qtdChecker", () => {
   qtdChecker(req, resResponser, next);
   assertEquals(resResponser.body.message, "quantidade inválida", "ta pasando quantidade negativa");
   assertEquals(resResponser.body.code, 422, "não ta retornando o código correto");
-  assertEquals(nextCalled, false);
+  assertEquals(nextCalled, false, "next foi chamado");
 
   const req2 = {
     method: "PUT",
@@ -206,27 +207,30 @@ Deno.test("dados invalidos no qtdChecker", () => {
   qtdChecker(req2, resResponser, next);
   assertEquals(resResponser.body.message, "quantidade inválida", "ta passando quantidade sem ser numero");
   assertEquals(resResponser.body.code, 422, "não ta retornando o código correto");
-  assertEquals(nextCalled, false);
+  assertEquals(nextCalled, false, "next foi chamado");
 })
 
 Deno.test("testes de autenticação e token", () => {
+  nextCalled = false;
   const req = { headers: {} };
   auth(req, resResponser, next);
-  assertEquals(resResponser.body.message, "Token não fornecido", "passou header vazio");
+  assertEquals(resResponser.body.message, "autorização inválida", "passou header vazio");
+  assertArrayIncludes(resResponser.body.errors, [ { field: "header", message: "header não fornecido" } ], "não passou pelo motivo errado");
   assertEquals(resResponser.body.code, 401, "não ta retornando o código correto");
-  assertEquals(nextCalled, false);
+  assertEquals(nextCalled, false, "next foi chamado");
 
   const req2 = { headers: { authorization: `${token}` } };
   auth(req2, resResponser, next);
-  assertEquals(resResponser.body.message, "sem Bearer", "passou token sem Bearer");
+  assertEquals(resResponser.body.message, "autorização inválida", "passou token sem Bearer");
+  assertArrayIncludes(resResponser.body.errors, [ { field: "header", message: "header deve incluir o Bearer" } ], "não passou pelo motivo errado");
   assertEquals(resResponser.body.code, 401, "não ta retornando o código correto");
-  assertEquals(nextCalled, false);
+  assertEquals(nextCalled, false, "next foi chamado");
 
   const req3 = { headers: { authorization: "Bearer abc" } };
   auth(req3, resResponser, next);
   assertEquals(resResponser.body.message, "Token inválido ou expirado", "passou token nada ave")
   assertEquals(resResponser.body.code, 401, "não ta retornando o código correto");
-  assertEquals(nextCalled, false);
+  assertEquals(nextCalled, false, "next foi chamado");
 })
 
 
@@ -243,6 +247,9 @@ Deno.test("testes de autenticação e token", () => {
 - put com campo a menos no update - uni
 - put com campo a menos no filter - uni
 - colocar id no body do post e do update - uni
+- query vazio pra delete - uni
+- id de o que não tem na transferencia (ambos os lados) - int
+- quantidade tranferencia maior que qtd normal - int
 */
 
 /* TESTES AGX
