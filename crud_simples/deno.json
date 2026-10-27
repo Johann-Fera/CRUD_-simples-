@@ -9,6 +9,9 @@
     "jsonwebtoken": "npm:jsonwebtoken@^9.0.3",
     "mongoose": "npm:mongoose@^9.11.2",
     "request-check": "npm:request-check@^1.6.2",
-    "responser": "npm:responser@^2.5.6"
+    "responser": "npm:responser@^2.5.6",
+    "morgan": "npm:morgan@1",
+    "isness": "jsr:@zarco/isness",
+    "throwlhos": "npm:throwlhos@^1.1.0"
   }
 }

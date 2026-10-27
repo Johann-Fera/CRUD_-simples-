@@ -1,7 +1,7 @@
 import mongoose, { QueryFilter } from 'mongoose';
 import comida from './models/comida.ts';
 import { OpTransfer } from "./interfaces.ts";
-
+import throwlhos from "throwlhos";
 
 export async function connectdb() {
     const dburl = Deno.env.get("DB_URL");
@@ -15,6 +15,7 @@ export async function findQuery(query: QueryFilter<typeof comida>) {
         return lista;
     } catch (error) {
         console.dir(error);
+        throw error;
     }
 }
 
@@ -25,6 +26,7 @@ export async function saveComida(body: typeof comida) {
         return comidaSalva._id;
     } catch (error) {
         console.dir(error);
+        throw error;
     }
 }
 
@@ -37,35 +39,36 @@ export async function updateComId(id: string, body: typeof comida) {
         return comidaAtualizada;
     } catch (error) {
         console.dir(error);
+        throw error;
     }
 }
 
 export async function deleteQuery(query: QueryFilter<typeof comida>) {
     try {
-        // arranja um jeito de não deixar passar uma qeury vazia
         const deletou = await comida.deleteMany(query);
         return deletou;
     } catch (error) {
         console.dir(error);
+        throw error;
     }
 }
 
 export async function transferirExpirada(transfer: OpTransfer) {
-    try {
         const comidaDV = await comida.findById(transfer.id_dv);
         const comidaFV = await comida.findById(transfer.id_fv);
-        if (!comidaDV) throw new Error("não encontrou comida dentro da validade com esse id");
-        if (!comidaFV) throw new Error("não encontrou comida fora da validade com esse id");
-        if (comidaDV.quantidade < transfer.quantidade) throw new Error("não é possivel transferir mais do que tem");
+        if (!comidaDV) throw throwlhos.default.err_notFound("não encontrou comida dentro da validade com esse id");
+        if (!comidaFV) throw throwlhos.default.err_notFound("não encontrou comida fora da validade com esse id");
+        if (comidaDV.quantidade < transfer.quantidade) throw throwlhos.default.err_conflict("não é possivel transferir mais do que tem");
         comidaDV.quantidade = comidaDV.quantidade - transfer.quantidade;
         comidaFV.quantidade = comidaFV.quantidade + transfer.quantidade;
+    try {
         await mongoose.connection.transaction(async (session) => {
             await comidaDV.save({ session });
             await comidaFV.save({ session });
         });
         return "transação feita";
     } catch (error) {
-        return "deu errado" + error;
+        throw error;
     }
 }
 

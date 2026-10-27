@@ -1,10 +1,11 @@
+import is from "isness";
 import requestCheck from "request-check";
 
 export const rc = (requestCheck as any).default();
 rc.requiredMessage = ':name não fornecido';
 
 rc.addRule('nome', {
-    validator: (nome:string) => nome.trim() != "",
+    validator: (nome:string) => !is.whitespace(nome),
     message: 'o nome não deve ser vazio',
 });
 

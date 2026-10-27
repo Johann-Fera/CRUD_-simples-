@@ -1,12 +1,14 @@
-import express, { type Express, type Request, type Response, type NextFunction } from 'express';
+import express, { NextFunction, type Express, type Request, type Response } from 'express';
 import { findQuery, saveComida, updateComId, deleteQuery, transferirExpirada } from './repository.ts';
 import type { QueryFilter } from "mongoose";
 import { OpTransfer } from "./interfaces.ts";
 import comida from "./models/comida.ts"
 import jwt from "jsonwebtoken";
 import responser from "responser";
-import requestCheck from "request-check";
 import { rc } from "./rq-ck.ts";
+import morgan from "morgan";
+import is from "isness";
+import throwlhos from "throwlhos";
 
 export const app: Express = express();
 
@@ -14,12 +16,15 @@ const secret = Deno.env.get("JWT_secret");
 
 app.use((responser as any).default);
 app.use(express.json());
+//app.use(morgan("tiny", {immediate: true}));
+//app.use(morgan("short"));
+app.use(throwlhos.default.middleware);
 
 export const nomeChecker = function (req: Request, res: Response, next: NextFunction) {
   let nome:string = req.body?.nome;
-  if (!nome) nome = req.query?.nome;
-  if ((req.method == 'GET' || req.method == 'PUT' || req.method == 'DELETE') && !nome) return next();
-  if (typeof nome != "string") return res.send_unprocessableEntity("nome inválido", [ { field: "nome", message: "o nome deve ser string" } ]);
+  if (typeof nome === "undefined") nome = req.query?.nome;
+  if (req.method != 'POST'  && typeof nome === "undefined") return next();
+  if (!is.string(nome)) return res.send_unprocessableEntity("nome inválido", [ { field: "nome", message: "o nome deve ser string" } ]);
   const errors = rc.check({nome});
   if (errors) {
     return res.send_unprocessableEntity("nome inválido",errors);
@@ -29,9 +34,10 @@ export const nomeChecker = function (req: Request, res: Response, next: NextFunc
 
 export const qtdChecker = function (req: Request, res: Response, next: NextFunction) {
   let quantidade:number = req.body?.quantidade;
-  if (!quantidade) quantidade = req.query?.quantidade;
-  if ((req.method == 'GET' || req.method == 'PUT' || req.method == 'DELETE') && !quantidade) return next();
-  if (typeof quantidade != "number") return res.send_unprocessableEntity("quantidade inválida", [ { field: "quantidade", message: "a quantidade deve ser number" } ]);
+  if (typeof quantidade === "undefined" ) quantidade = req.query?.quantidade;
+  if (req.method != 'POST' && typeof quantidade === "undefined") return next();
+  if (!is.number(quantidade)) return res.send_unprocessableEntity("quantidade inválida", [ { field: "quantidade", message: "a quantidade deve ser number" } ]);
+  quantidade = Number(quantidade);
   const errors = rc.check({quantidade});
   if (errors) {
     return res.send_unprocessableEntity("quantidade inválida",errors);
@@ -74,40 +80,87 @@ app.get('/', nomeChecker, qtdChecker, async (req: Request, res: Response) => {
   if (nome) filter.nome = nome;
   if (quantidade) filter.quantidade = quantidade;
   if (validade) filter.validade = validade;
-  const dados = await findQuery(filter);
-  res.send_ok("comidas retornadas", dados);
+  try {
+    const dados = await findQuery(filter);
+    res.send_ok("comidas retornadas", dados);
+  } catch (error) {
+    throw error;
+  }
 });
 
 app.post('/comida', auth, autoADM, nomeChecker, qtdChecker, async (req: Request, res: Response) => {
   const novaComida: typeof comida = req.body;
-  const dados = await saveComida(novaComida);
-  res.send_created("comidas criada", dados);
+  try {
+    const dados = await saveComida(novaComida);
+    res.send_created("comidas criada", dados);
+  } catch (error) {
+    throw error;
+  }
 });
 
 app.post('/comida/expirou', auth, qtdChecker, async (req: Request, res: Response) => {
   const transfer: OpTransfer = req.body;
-  const dados = await transferirExpirada(transfer);
-  res.send_accepted ("transferencia feita", dados);
+  try {
+    const dados = await transferirExpirada(transfer);
+    res.send_accepted ("transferencia feita", dados);
+  } catch (error) {
+    throw error;
+  }
 });
 
 app.put('/comida/:id', auth, autoADM, nomeChecker, qtdChecker, async (req: Request, res: Response) => {
   const comidaAtualizada: typeof comida = req.body;
   const id: string = req.params.id;
-  const dados = await updateComId(id, comidaAtualizada);
-  res.send_ok("comidas atualizada", dados);
+  try {
+    const dados = await updateComId(id, comidaAtualizada);
+    res.send_ok("comidas atualizada", dados);
+  } catch (error) {
+    throw error;
+  }
 });
 
 app.delete('/comida', auth, autoADM, nomeChecker, qtdChecker, async (req: Request, res: Response) => {
-  const {id, nome, qtd, validade} = req.query;
+  const {id, nome, quantidade, validade} = req.query;
   const filter : QueryFilter<typeof comida> = {};
   if (id) filter.id = id;
   if (nome) filter.nome = nome;
-  if (qtd) filter.quantidade = qtd;
+  if (quantidade) filter.quantidade = quantidade;
   if (validade) filter.validade = validade;
-  const dados = await deleteQuery(filter);
-  res.send_noContent("comidas deletada", dados);
+  if (Object.keys(filter).length == 0) throw throwlhos.default.err_badRequest("filtro vazio em delete");
+  try {
+    const dados = await deleteQuery(filter);
+    res.send_noContent("comidas deletada", dados);
+  } catch (error) {
+    throw error;
+  }
 });
 
 app.use((_req:Request, res: Response) => {
-  res.send_methodNotAllowed("não tem esse metodo para esse endpoint");
+  throw throwlhos.default.err_methodNotAllowed("não tem esse metodo para esse endpoint");
 });
+
+app.use((err: any, _req:Request, res:Response, _next:NextFunction) => {
+  switch (err.code) {
+
+    case 400:
+      res.send_badRequest("Bad Request",err);
+      break;
+    case 404:
+      res.send_notFound("Not Found",err);
+      break;
+    case 405:
+      res.send_methodNotAllowed("Method Not Allowed",err);
+      break;
+    case 409:
+      res.send_conflict("Conflict",err);
+      break;
+    case 500:
+      res.send_internalServerError("Internal Server Error",err);
+      break;
+  
+    default:
+      console.log(err);
+      res.send_internalServerError("erro novo",err);
+      break;
+  }
+})
