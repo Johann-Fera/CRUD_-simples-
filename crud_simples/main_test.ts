@@ -1,10 +1,12 @@
-import { assertArrayIncludes, assertEquals, assertExists, assertObjectMatch, assert } from "@std/assert";
+import { assertArrayIncludes, assertEquals, assert, assertExists, assertThrows } from "@std/assert";
 import { connectdb, disconnectFromMongoDB } from "./repository.ts";
-import { app, auth, nomeChecker, qtdChecker } from "./app.ts";
+import { app, auth, nomeChecker, qtdChecker, autoADM } from "./app.ts";
 import { Response } from 'express';
 import responser from "responser";
+import { IThrowlhos } from "throwlhos";
 
 const token = Deno.env.get("API_token");
+//const token2 = Deno.env.get("noRole_token");
 let server : ReturnType<typeof app.listen>;
 
 Deno.test.beforeAll(() => {
@@ -133,7 +135,7 @@ function mockRes() {
     json(body: any) { this.body = body; return this; },
   };
 
-  (responser as any).default( req_proResponser, res, next_proResponser );
+  (responser).default( req_proResponser, res, next_proResponser );
   return res;
 }
 const resResponser = mockRes();
@@ -144,11 +146,12 @@ Deno.test("dados invalidos no nomeChecker", () => {
   const req = {
     method: "PUT",
     headers: {"Content-Type": "application/json"},
-    body: {nome: " ", quantidade: 10}, 
+    body: {nome: "  ", quantidade: 10}, 
   };
-  nomeChecker(req, resResponser, next);
-  assertEquals(resResponser.body.message, "nome inválido", "ta passando nome vazio");
-  assertEquals(resResponser.body.code, 422, "não ta retornando o código correto");
+  const err = assertThrows(() => nomeChecker(req, resResponser, next), "ta passando nome vazio") as IThrowlhos;
+  assertEquals(err.message, "nome inválido", "mensagem errada");
+  assertArrayIncludes(err.errors, [ { field: "nome", message: "o nome não deve ser vazio", } ], "não passou pelo motivo errado");
+  assertEquals(err.code, 422, "não ta retornando o código correto");
   assertEquals(nextCalled, false, "next foi chamado");
 
   const req2 = {
@@ -156,9 +159,9 @@ Deno.test("dados invalidos no nomeChecker", () => {
     headers: {"Content-Type": "application/json"},
     body: {nome: 10, quantidade: 10}, 
   };
-  nomeChecker(req2, resResponser, next);
-  assertEquals(resResponser.body.message, "nome inválido", "ta passando nome sem ser string");
-  assertEquals(resResponser.body.code, 422, "não ta retornando o código correto");
+  const err2 = assertThrows(() => nomeChecker(req2, resResponser, next), "ta passando nome sem ser string") as IThrowlhos;
+  assertEquals(err2.message, "nome deve ser string", "mensagem errada");
+  assertEquals(err2.code, 422, "não ta retornando o código correto");
   assertEquals(nextCalled, false, "next foi chamado");
 })
 
@@ -169,9 +172,10 @@ Deno.test("dados invalidos no qtdChecker", () => {
     headers: {"Content-Type": "application/json"},
     body: {nome: "abacate ruim", quantidade: -1}, 
   };
-  qtdChecker(req, resResponser, next);
-  assertEquals(resResponser.body.message, "quantidade inválida", "ta pasando quantidade negativa");
-  assertEquals(resResponser.body.code, 422, "não ta retornando o código correto");
+  const err = assertThrows(() => qtdChecker(req, resResponser, next), "ta pasando quantidade negativa") as IThrowlhos;
+  assertEquals(err.message, "quantidade inválida", "mensagem errada");
+  assertArrayIncludes(err.errors, [ { field: "quantidade", message: "a quantidade não deve ser negativa" } ], "não passou pelo motivo errado");
+  assertEquals(err.code, 422, "não ta retornando o código correto");
   assertEquals(nextCalled, false, "next foi chamado");
 
   const req2 = {
@@ -179,32 +183,47 @@ Deno.test("dados invalidos no qtdChecker", () => {
     headers: {"Content-Type": "application/json"},
     body: {nome: "abacate ruim", quantidade: "bruh"}, 
   };
-  qtdChecker(req2, resResponser, next);
-  assertEquals(resResponser.body.message, "quantidade inválida", "ta passando quantidade sem ser numero");
-  assertEquals(resResponser.body.code, 422, "não ta retornando o código correto");
+  const err2 = assertThrows(() => qtdChecker(req2, resResponser, next), "ta passando quantidade sem ser numero") as IThrowlhos;
+  assertEquals(err2.message, "quantidade deve ser number", "mensagem errada");
+  assertEquals(err2.code, 422, "não ta retornando o código correto");
   assertEquals(nextCalled, false, "next foi chamado");
 })
 
 Deno.test("testes de autenticação e token", () => {
   nextCalled = false;
   const req = { headers: {} };
-  auth(req, resResponser, next);
-  assertEquals(resResponser.body.message, "autorização inválida", "passou header vazio");
-  assertArrayIncludes(resResponser.body.errors, [ { field: "header", message: "header não fornecido" } ], "não passou pelo motivo errado");
-  assertEquals(resResponser.body.code, 401, "não ta retornando o código correto");
+  const err = assertThrows(() => auth(req, resResponser, next), "passou header vazio") as IThrowlhos;
+  assertEquals(err.message, "autorização inválida", "mensagem errada");
+  assertArrayIncludes(err.errors, [ { field: "header", message: "header não fornecido" } ], "não passou pelo motivo errado");
+  assertEquals(err.code, 401, "não ta retornando o código correto");
   assertEquals(nextCalled, false, "next foi chamado");
-
+  
   const req2 = { headers: { authorization: `${token}` } };
-  auth(req2, resResponser, next);
-  assertEquals(resResponser.body.message, "autorização inválida", "passou token sem Bearer");
-  assertArrayIncludes(resResponser.body.errors, [ { field: "header", message: "header deve incluir o Bearer" } ], "não passou pelo motivo errado");
-  assertEquals(resResponser.body.code, 401, "não ta retornando o código correto");
+  const err2 = assertThrows(() => auth(req2, resResponser, next), "passou token sem Bearer") as IThrowlhos;
+  assertEquals(err2.message, "autorização inválida", "mensagem errada");
+  assertArrayIncludes(err2.errors, [ { field: "header", message: "header deve incluir o Bearer" } ], "não passou pelo motivo errado");
+  assertEquals(err2.code, 401, "não ta retornando o código correto");
   assertEquals(nextCalled, false, "next foi chamado");
 
   const req3 = { headers: { authorization: "Bearer abc" } };
-  auth(req3, resResponser, next);
-  assertEquals(resResponser.body.message, "Token inválido ou expirado", "passou token nada ave")
-  assertEquals(resResponser.body.code, 401, "não ta retornando o código correto");
+  const err3 = assertThrows(() => auth(req3, resResponser, next), "passou token nada ave") as IThrowlhos;
+  assertEquals(err3.message, "Token inválido ou expirado", "mensagem errada")
+  assertEquals(err3.code, 401, "não ta retornando o código correto");
+  assertEquals(nextCalled, false, "next foi chamado");
+})
+
+Deno.test("testes de autorização", () => {
+  nextCalled = false;
+  const req = { auto: {} };
+  const err = assertThrows(() => autoADM(req, resResponser, next), "passou header com auto vazio") as IThrowlhos;
+  assertEquals(err.message, "Sem permissão", "mensagem errada");
+  assertEquals(err.code, 403, "não ta retornando o código correto");
+  assertEquals(nextCalled, false, "next foi chamado");
+
+  const req2 = { auto: { role: "no one"} };
+  const err2 = assertThrows(() => autoADM(req2, resResponser, next), "passou sem ter role ADM") as IThrowlhos;
+  assertEquals(err2.message, "Sem a permissão", "mensagem errada");
+  assertEquals(err2.code, 403, "não ta retornando o código correto");
   assertEquals(nextCalled, false, "next foi chamado");
 })
 
@@ -226,6 +245,8 @@ Deno.test("testes de autenticação e token", () => {
 - id de o que não tem na transferencia (ambos os lados) - int
 - quantidade tranferencia maior que qtd normal - int
 - testes para erros em metodos do mongoose - int
+- testar erros do error handler - int
+- teste que passa pela auth mas é barrado na auto - int
 */
 
 /* TESTES AGX

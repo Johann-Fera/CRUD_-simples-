@@ -3,22 +3,19 @@
 idéia = estoque de comida
 
 atual:<br>
-[X] - implementar morgan<br>
-[X] - implementar isness<br>
-[X] - implementar throwlhos<br>
-[X] - error handler middleware<br>
+[X] - colocar throwlhos em mais middlewares e no handler (os checkers e de auth/auto)<br>
+[X] - mudar testes para verificar throwlhos<br>
+[X] - teste de autorização (vai ter que criar otro token)<br>
+[X] - colocar token reutilizável no postman<br>
+[_] - listagem de endpoint, explicação e exemplo no postman<br>
+
 
 proximo:<br>
-[ ] - colocar throwlhos em mais middlewares e no handler (os checkers e de auth/auto)<br>
-[ ] - mudar testes para verificar throwlhos<br>
-[ ] - teste de autorização (vai ter que criar otro token)<br>
-[ ] - colocar token reutilizável no postman<br>
-[ ] - listagem de endpoint, explicação e exemplo no postman<br>
 [ ] - listagem de endpoint, explicação e exemplo no readme<br>
+[ ] - descobrir como será a apresentação<br>
+[ ] - aumentar test coverage<br>
 
 a fazer:<br>
-- descobrir como será a apresentação<br>
-- aumentar test coverage<br>
 - refazer com os padrões de codigo da AGX<br>
 
 

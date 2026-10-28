@@ -8,49 +8,50 @@ import responser from "responser";
 import { rc } from "./rq-ck.ts";
 import morgan from "morgan";
 import is from "isness";
-import throwlhos from "throwlhos";
+import throwlhos, { IThrowlhos } from "throwlhos";
 
 export const app: Express = express();
 
 const secret = Deno.env.get("JWT_secret");
 
-app.use((responser as any).default);
+app.use((responser).default);
 app.use(express.json());
 //app.use(morgan("tiny", {immediate: true}));
 //app.use(morgan("short"));
 app.use(throwlhos.default.middleware);
 
-export const nomeChecker = function (req: Request, res: Response, next: NextFunction) {
+export const nomeChecker = function (req: Request, _res: Response, next: NextFunction) {
   let nome:string = req.body?.nome;
   if (typeof nome === "undefined") nome = req.query?.nome;
   if (req.method != 'POST'  && typeof nome === "undefined") return next();
-  if (!is.string(nome)) return res.send_unprocessableEntity("nome inválido", [ { field: "nome", message: "o nome deve ser string" } ]);
+  if (!is.string(nome)) throw throwlhos.default.err_unprocessableEntity("nome deve ser string");
   const errors = rc.check({nome});
   if (errors) {
-    return res.send_unprocessableEntity("nome inválido",errors);
+    throw throwlhos.default.err_unprocessableEntity("nome inválido",errors);
   }
   return next();
 };
 
-export const qtdChecker = function (req: Request, res: Response, next: NextFunction) {
+export const qtdChecker = function (req: Request, _res: Response, next: NextFunction) {
   let quantidade:number = req.body?.quantidade;
   if (typeof quantidade === "undefined" ) quantidade = req.query?.quantidade;
   if (req.method != 'POST' && typeof quantidade === "undefined") return next();
-  if (!is.number(quantidade)) return res.send_unprocessableEntity("quantidade inválida", [ { field: "quantidade", message: "a quantidade deve ser number" } ]);
+  if (!is.number(quantidade)) throw throwlhos.default.err_unprocessableEntity("quantidade deve ser number");
   quantidade = Number(quantidade);
   const errors = rc.check({quantidade});
   if (errors) {
-    return res.send_unprocessableEntity("quantidade inválida",errors);
+    const erro = throwlhos.default.err_unprocessableEntity("quantidade inválida",errors);
+    throw erro;
   }
   return next();
 };
 
-export const auth = function (req: Request, res: Response, next: NextFunction) {
+export const auth = function (req: Request, _res: Response, next: NextFunction) {
   const header:string = req.headers.authorization;
 
   const errors = rc.check({header});
   if (errors) {
-    return res.send_unauthorized("autorização inválida",errors);
+    throw throwlhos.default.err_unauthorized("autorização inválida",errors);
   }
 
   const token = header.replace("Bearer ", "");
@@ -58,17 +59,17 @@ export const auth = function (req: Request, res: Response, next: NextFunction) {
     const payload = jwt.verify(token, secret);
     req.auto = payload; 
     return next();
-  } catch (err) {
-    return res.send_unauthorized("Token inválido ou expirado",err);
+  } catch (_error) {
+    throw throwlhos.default.err_unauthorized("Token inválido ou expirado");
   }
 }
 
-export const autoADM = function(req: Request, res: Response, next: NextFunction) {
+export const autoADM = function(req: Request, _res: Response, next: NextFunction) {
     if (!req.auto?.role) {
-      return res.send_forbidden("Sem permissão");
+      throw throwlhos.default.err_forbidden("Sem permissão");
     }
     if (req.auto.role != "admin") {
-      return res.send_forbidden("Sem permissão");
+      throw throwlhos.default.err_forbidden("Sem a permissão");
     }
     return next();
 }
@@ -92,13 +93,13 @@ app.post('/comida', auth, autoADM, nomeChecker, qtdChecker, async (req: Request,
   const novaComida: typeof comida = req.body;
   try {
     const dados = await saveComida(novaComida);
-    res.send_created("comidas criada", dados);
+    res.send_created("comida criada", dados);
   } catch (error) {
     throw error;
   }
 });
 
-app.post('/comida/expirou', auth, qtdChecker, async (req: Request, res: Response) => {
+app.post('/comida/expirou', auth, autoADM, qtdChecker, async (req: Request, res: Response) => {
   const transfer: OpTransfer = req.body;
   try {
     const dados = await transferirExpirada(transfer);
@@ -116,7 +117,7 @@ app.put('/comida/:id', auth, autoADM, nomeChecker, qtdChecker, async (req: Reque
     res.send_ok("comidas atualizada", dados);
   } catch (error) {
     throw error;
-  }
+  };
 });
 
 app.delete('/comida', auth, autoADM, nomeChecker, qtdChecker, async (req: Request, res: Response) => {
@@ -132,18 +133,23 @@ app.delete('/comida', auth, autoADM, nomeChecker, qtdChecker, async (req: Reques
     res.send_noContent("comidas deletada", dados);
   } catch (error) {
     throw error;
-  }
+  };
 });
 
-app.use((_req:Request, res: Response) => {
+app.use((_req:Request, _res: Response) => {
   throw throwlhos.default.err_methodNotAllowed("não tem esse metodo para esse endpoint");
 });
 
-app.use((err: any, _req:Request, res:Response, _next:NextFunction) => {
+app.use((err: IThrowlhos, _req:Request, res:Response, _next:NextFunction) => {
   switch (err.code) {
-
     case 400:
       res.send_badRequest("Bad Request",err);
+      break;
+    case 401:
+      res.send_unauthorized("Unauthorized",err);
+      break;
+    case 403:
+      res.send_forbidden("Forbidden",err);
       break;
     case 404:
       res.send_notFound("Not Found",err);
@@ -154,6 +160,9 @@ app.use((err: any, _req:Request, res:Response, _next:NextFunction) => {
     case 409:
       res.send_conflict("Conflict",err);
       break;
+    case 422:
+      res.send_unprocessableEntity("Unprocessable Entity",err);
+      break;
     case 500:
       res.send_internalServerError("Internal Server Error",err);
       break;
@@ -162,5 +171,5 @@ app.use((err: any, _req:Request, res:Response, _next:NextFunction) => {
       console.log(err);
       res.send_internalServerError("erro novo",err);
       break;
-  }
-})
+  };
+});

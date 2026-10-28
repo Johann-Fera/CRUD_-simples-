@@ -7,7 +7,7 @@
 - Colocar os valores corretos para as chaves
 - para conseguir o JWT_secret, gere ele com `deno eval "const bytes = crypto.getRandomValues(new Uint8Array(32)); console.log(btoa(String.fromCharCode(...bytes)))"`
 - Rode `cd crud_simples`, para entrar na pasta do backend
-- para conseguir a API_token, gere ela com `deno --env-file=.env generate_token.ts`
+- para conseguir a API_token e o noRole_token, gere eles com `deno --env-file=.env generate_token.ts`
 - Rode `deno --env-file=.env -N -E -S -R  main.ts` para iniciar
 
 # Rodar testes
