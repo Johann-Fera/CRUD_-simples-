@@ -1,6 +1,6 @@
 import { assertArrayIncludes, assertEquals, assert, assertExists, assertThrows } from "@std/assert";
 import { connectdb, disconnectFromMongoDB } from "./repository.ts";
-import { app, auth, nomeChecker, qtdChecker, autoADM } from "./app.ts";
+import { app, auth, nomeChecker, qtdChecker, autoADM, valChecker } from "./app.ts";
 import { Response } from 'express';
 import responser from "responser";
 import { IThrowlhos } from "throwlhos";
@@ -33,7 +33,7 @@ Deno.test("retorna lista de comida do banco e ve se contém essa comida ae", asy
   assertEquals(dados.code, 200, "não ta retornando o código correto");
 })
 
-Deno.test("adiciona comida e ve se ela ta na collection pelo id", async () => {
+Deno.test("adiciona comida e ve se ela ta na collection pelo id depois apaga e ve denovo", async () => {
   const res:Response = await fetch(`http://localhost:3000/comida`, {
     method: "POST",
     headers: {"Content-Type": "application/json", "authorization": `Bearer ${token}`},
@@ -47,6 +47,17 @@ Deno.test("adiciona comida e ve se ela ta na collection pelo id", async () => {
   const dados2 = await res2.json();
   assertEquals(dados2.data, [{_id:dados.data, nome: "comida", quantidade: 1, validade: true}], "deu ruim, não tem a comida que coloquei");
   assertEquals(dados2.code, 200, "não ta retornando o código correto");
+
+  const res3:Response = await fetch(`http://localhost:3000/comida?_id=${dados.data}&nome=comida&quantidade=1&validade=true`,{
+    method: "DELETE",
+    headers: {"Content-Type": "application/json", "authorization": `Bearer ${token}`},
+  });
+  assertEquals(res3.status, 204, "não ta retornando o código correto");
+
+  const res4:Response = await fetch(`http://localhost:3000/`);
+  const dados4 = await res4.json();
+  assert(!dados4.data.includes({nome: "comida", quantidade: 1}), "a comida não foi deletada");
+  assertEquals(dados4.code, 200, "não ta retornando o código correto");
 });
 
 Deno.test("atualiza a quantidade de abacates para a quantidade de comidas na collection", async () => {
@@ -62,19 +73,6 @@ Deno.test("atualiza a quantidade de abacates para a quantidade de comidas na col
   });
   const dados2 = await res2.json();
   assertEquals(dados2.data, {_id: id_abacate, nome: "abacate", quantidade: tamanho, validade: true}, "deu ruim, o abacate não atualizou");
-  assertEquals(dados2.code, 200, "não ta retornando o código correto");
-})
-
-Deno.test("deleta a comida que foi criada no teste POST", async () => {
-  const res:Response = await fetch(`http://localhost:3000/comida?nome=comida&quantidade=1`,{
-    method: "DELETE",
-    headers: {"Content-Type": "application/json", "authorization": `Bearer ${token}`},
-  });
-  assertEquals(res.status, 204, "não ta retornando o código correto");
-
-  const res2:Response = await fetch(`http://localhost:3000/`);
-  const dados2 = await res2.json();
-  assert(!dados2.data.includes({nome: "comida", quantidade: 1}), "a comida não foi deletada");
   assertEquals(dados2.code, 200, "não ta retornando o código correto");
 })
 
@@ -110,7 +108,15 @@ Deno.test("transferir quantidade de banana para banana fora da validade", async 
     {_id: id_bananaFV, nome: "banana", quantidade: 2, validade: false}
   ], "deu ruim, as bananas não vieram ou a transação não foi feita corretamente");
   assertEquals(dados2.code, 200, "não ta retornando o código correto");
+})
 
+Deno.test("GET usando todo o filtro", async () => {
+  const res:Response = await fetch(`http://localhost:3000/?nome=comida&quantidade=0&validade=true&_id=6ae0aa2a35d1b95dc4f299b3`);
+  const dados = await res.json();
+  assertArrayIncludes(dados.data, [
+    {_id: '6ae0aa2a35d1b95dc4f299b3', nome: "comida", quantidade: 0, validade: true}
+  ], "deu ruim, filtro cheio ta dando errado");
+  assertEquals(dados.code, 200, "não ta retornando o código correto");
 })
 
 Deno.test("métodos no endpoint errado", async () => {
@@ -118,6 +124,57 @@ Deno.test("métodos no endpoint errado", async () => {
   const dados = await res.json();
   assertEquals(dados.errors.message,"não tem esse metodo para esse endpoint", "não era para ter get na /comida ");
   assertEquals(dados.code, 405, "não ta retornando o código correto");
+})
+
+Deno.test("erros de transferência", async () => {
+  const id_banana:string = '6ae0ab4278df6bcd4ed97b17';
+  const id_bananaFV:string = '6ae0ab4fc07ff03bcc5edf7e';
+  //transferir mais do que o valido tem, para o expirado
+  const res:Response = await fetch(`http://localhost:3000/comida/expirou`,{
+    method: "POST",
+    headers: {"Content-Type": "application/json", "authorization": `Bearer ${token}`},
+    body: JSON.stringify({id_dv:id_banana, id_fv:id_bananaFV, quantidade:200}), 
+  });
+  const dados = await res.json();
+  assertEquals(dados.errors.message,"não é possivel transferir mais do que tem", "transferindo mais do que o valido tem");
+  assertEquals(dados.code, 409, "não ta retornando o código correto");
+  //transferencia "sem" id_dv
+  const res2:Response = await fetch(`http://localhost:3000/comida/expirou`,{
+    method: "POST",
+    headers: {"Content-Type": "application/json", "authorization": `Bearer ${token}`},
+    body: JSON.stringify({id_dv:'6ae0ab4278df6bcd4ed97b18', id_fv:id_bananaFV, quantidade:2}), 
+  });
+  const dados2 = await res2.json();
+  assertEquals(dados2.errors.message,"não encontrou comida dentro da validade com esse id", "transferindo sem id_dv");
+  assertEquals(dados2.code, 404, "não ta retornando o código correto");
+  //transferencia "sem" id_fv
+  const res3:Response = await fetch(`http://localhost:3000/comida/expirou`,{
+    method: "POST",
+    headers: {"Content-Type": "application/json", "authorization": `Bearer ${token}`},
+    body: JSON.stringify({id_dv:id_banana, id_fv:'6ae0ab4fc07ff03bcc5edf7f', quantidade:2}), 
+  });
+  const dados3 = await res3.json();
+  assertEquals(dados3.errors.message,"não encontrou comida fora da validade com esse id", "transferindo sem id_fv");
+  assertEquals(dados3.code, 404, "não ta retornando o código correto");
+  //transferencia com ids validos mais de comidas diferentes
+  const res4:Response = await fetch(`http://localhost:3000/comida/expirou`,{
+    method: "POST",
+    headers: {"Content-Type": "application/json", "authorization": `Bearer ${token}`},
+    body: JSON.stringify({id_dv:"6ae0ab01cf1a525cc411e8b4", id_fv:id_bananaFV, quantidade:2}), 
+  });
+  const dados4 = await res4.json();
+  assertEquals(dados4.errors.message,"os nomes devem ser iguais", "transferindo em comidas diferentes");
+  assertEquals(dados4.code, 422, "não ta retornando o código correto");
+})
+
+Deno.test("DELETE de filtro vazio", async () => {
+  const res:Response = await fetch(`http://localhost:3000/comida`,{
+    method: "DELETE",
+    headers: {"Content-Type": "application/json", "authorization": `Bearer ${token}`},
+  });
+  const dados = await res.json();
+  assertEquals(dados.errors.message,"filtro vazio em delete", "erro pelo motivo errado");
+  assertEquals(dados.code, 400, "não ta retornando o código correto");
 })
 
 // unitario
@@ -227,6 +284,19 @@ Deno.test("testes de autorização", () => {
   assertEquals(nextCalled, false, "next foi chamado");
 })
 
+Deno.test("testes de validade", () => {
+  nextCalled = false;
+  const req = {
+    method: "PUT",
+    headers: {"Content-Type": "application/json"},
+    body: {validade: "brah"}, 
+  };
+  const err = assertThrows(() => valChecker(req, resResponser, next), "passou validade não boolean") as IThrowlhos;
+  assertEquals(err.message, "validade deve ser boolean", "mensagem errada");
+  assertEquals(err.code, 422, "não ta retornando o código correto");
+  assertEquals(nextCalled, false, "next foi chamado");
+})
+
 
 /*
 - deletar o que não tem - int
@@ -243,7 +313,6 @@ Deno.test("testes de autorização", () => {
 - colocar id no body do post e do update - uni
 - query vazio pra delete - uni
 - id de o que não tem na transferencia (ambos os lados) - int
-- quantidade tranferencia maior que qtd normal - int
 - testes para erros em metodos do mongoose - int
 - testar erros do error handler - int
 - teste que passa pela auth mas é barrado na auto - int

@@ -22,8 +22,10 @@ app.use(throwlhos.default.middleware);
 
 export const nomeChecker = function (req: Request, _res: Response, next: NextFunction) {
   let nome:string = req.body?.nome;
-  if (typeof nome === "undefined") nome = req.query?.nome;
-  if (req.method != 'POST'  && typeof nome === "undefined") return next();
+  if (typeof nome === "undefined") {
+    nome = req.query?.nome;
+    if (req.method != 'POST'  && typeof nome === "undefined") return next();
+  }
   if (!is.string(nome)) throw throwlhos.default.err_unprocessableEntity("nome deve ser string");
   const errors = rc.check({nome});
   if (errors) {
@@ -34,8 +36,10 @@ export const nomeChecker = function (req: Request, _res: Response, next: NextFun
 
 export const qtdChecker = function (req: Request, _res: Response, next: NextFunction) {
   let quantidade:number = req.body?.quantidade;
-  if (typeof quantidade === "undefined" ) quantidade = req.query?.quantidade;
-  if (req.method != 'POST' && typeof quantidade === "undefined") return next();
+  if (typeof quantidade === "undefined" ) {
+    quantidade = req.query?.quantidade;
+    if (req.method != 'POST' && typeof quantidade === "undefined") return next();
+  }
   if (!is.number(quantidade)) throw throwlhos.default.err_unprocessableEntity("quantidade deve ser number");
   quantidade = Number(quantidade);
   const errors = rc.check({quantidade});
@@ -46,6 +50,29 @@ export const qtdChecker = function (req: Request, _res: Response, next: NextFunc
   return next();
 };
 
+export const valChecker = function (req: Request, _res: Response, next: NextFunction) {
+  let validade:number = req.body?.validade;
+  if (typeof validade === "undefined" ) {
+    validade = req.query?.validade;
+    if (typeof validade === "undefined") return next();
+  }
+  if (!is.booleanLike(validade)) throw throwlhos.default.err_unprocessableEntity("validade deve ser boolean");
+  return next();
+};
+/*
+export const idChecker = function (req: Request, _res: Response, next: NextFunction) {
+  let validade:number = req.body?.validade;
+  if (typeof validade === "undefined" ) {
+    validade = req.query?.validade;
+    if (typeof validade === "undefined") return next();
+  }
+  if (!is.booleanLike(validade)) throw throwlhos.default.err_unprocessableEntity("validade deve ser boolean");
+  return next();
+  //GET e DELETE é opcional
+  //POST é priobido e PUT é obrigatório
+  //transfer é obrigatório e tem 2
+};
+*/
 export const auth = function (req: Request, _res: Response, next: NextFunction) {
   const header:string = req.headers.authorization;
 
@@ -74,7 +101,7 @@ export const autoADM = function(req: Request, _res: Response, next: NextFunction
     return next();
 }
 
-app.get('/', nomeChecker, qtdChecker, async (req: Request, res: Response) => {
+app.get('/', nomeChecker, qtdChecker, valChecker, async (req: Request, res: Response) => {
   const {_id, nome, quantidade, validade} = req.query;
   const filter : QueryFilter<typeof comida> = {};
   if (_id) filter._id = _id;
@@ -89,7 +116,7 @@ app.get('/', nomeChecker, qtdChecker, async (req: Request, res: Response) => {
   }
 });
 
-app.post('/comida', auth, autoADM, nomeChecker, qtdChecker, async (req: Request, res: Response) => {
+app.post('/comida', auth, autoADM, nomeChecker, qtdChecker, valChecker, async (req: Request, res: Response) => {
   const novaComida: typeof comida = req.body;
   try {
     const dados = await saveComida(novaComida);
@@ -109,7 +136,7 @@ app.post('/comida/expirou', auth, autoADM, qtdChecker, async (req: Request, res:
   }
 });
 
-app.put('/comida/:id', auth, autoADM, nomeChecker, qtdChecker, async (req: Request, res: Response) => {
+app.put('/comida/:id', auth, autoADM, nomeChecker, qtdChecker, valChecker, async (req: Request, res: Response) => {
   const comidaAtualizada: typeof comida = req.body;
   const id: string = req.params.id;
   try {
@@ -120,17 +147,17 @@ app.put('/comida/:id', auth, autoADM, nomeChecker, qtdChecker, async (req: Reque
   };
 });
 
-app.delete('/comida', auth, autoADM, nomeChecker, qtdChecker, async (req: Request, res: Response) => {
-  const {id, nome, quantidade, validade} = req.query;
+app.delete('/comida', auth, autoADM, nomeChecker, qtdChecker, valChecker, async (req: Request, res: Response) => {
+  const {_id, nome, quantidade, validade} = req.query;
   const filter : QueryFilter<typeof comida> = {};
-  if (id) filter.id = id;
+  if (_id) filter._id = _id;
   if (nome) filter.nome = nome;
   if (quantidade) filter.quantidade = quantidade;
   if (validade) filter.validade = validade;
   if (Object.keys(filter).length == 0) throw throwlhos.default.err_badRequest("filtro vazio em delete");
   try {
-    const dados = await deleteQuery(filter);
-    res.send_noContent("comidas deletada", dados);
+    await deleteQuery(filter);
+    res.send_noContent("comidas deletada");
   } catch (error) {
     throw error;
   };
@@ -162,9 +189,6 @@ app.use((err: IThrowlhos, _req:Request, res:Response, _next:NextFunction) => {
       break;
     case 422:
       res.send_unprocessableEntity("Unprocessable Entity",err);
-      break;
-    case 500:
-      res.send_internalServerError("Internal Server Error",err);
       break;
   
     default:

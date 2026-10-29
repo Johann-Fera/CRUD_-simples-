@@ -45,8 +45,7 @@ export async function updateComId(id: string, body: typeof comida) {
 
 export async function deleteQuery(query: QueryFilter<typeof comida>) {
     try {
-        const deletou = await comida.deleteMany(query);
-        return deletou;
+        await comida.deleteMany(query)
     } catch (error) {
         console.dir(error);
         throw error;
@@ -54,14 +53,16 @@ export async function deleteQuery(query: QueryFilter<typeof comida>) {
 }
 
 export async function transferirExpirada(transfer: OpTransfer) {
-        const comidaDV = await comida.findById(transfer.id_dv);
-        const comidaFV = await comida.findById(transfer.id_fv);
-        if (!comidaDV) throw throwlhos.default.err_notFound("não encontrou comida dentro da validade com esse id");
-        if (!comidaFV) throw throwlhos.default.err_notFound("não encontrou comida fora da validade com esse id");
-        if (comidaDV.quantidade < transfer.quantidade) throw throwlhos.default.err_conflict("não é possivel transferir mais do que tem");
-        comidaDV.quantidade = comidaDV.quantidade - transfer.quantidade;
-        comidaFV.quantidade = comidaFV.quantidade + transfer.quantidade;
     try {
+    //magina se vem mais de dois itens, ai ferro, nem tem como testar isso (naturalmente)
+    const [comidaDV,comidaFV] = await comida.find({_id: { $in: [transfer.id_dv, transfer.id_fv]}}).sort({validade: -1});
+    if (comidaDV?.validade != true) throw throwlhos.default.err_notFound("não encontrou comida dentro da validade com esse id");
+    if (comidaFV?.validade != false) throw throwlhos.default.err_notFound("não encontrou comida fora da validade com esse id");
+    if (comidaDV.nome !== comidaFV.nome) throw throwlhos.default.err_unprocessableEntity("os nomes devem ser iguais");
+    if (comidaDV.quantidade < transfer.quantidade) throw throwlhos.default.err_conflict("não é possivel transferir mais do que tem");
+    comidaDV.quantidade = comidaDV.quantidade - transfer.quantidade;
+    comidaFV.quantidade = comidaFV.quantidade + transfer.quantidade;
+    
         await mongoose.connection.transaction(async (session) => {
             await comidaDV.save({ session });
             await comidaFV.save({ session });
