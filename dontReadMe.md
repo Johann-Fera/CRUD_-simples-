@@ -5,8 +5,9 @@ idéia = estoque de comida
 atual:<br>
 [X] - garantir mais validação no rc (id)<br>
 
+
 proximo:<br>
-[ ] - refazer com os padrões de codigo da AGX<br>
+[ ] - tentar refazer com todos os padrões de codigo da AGX<br>
 
 a fazer:<br>
 
