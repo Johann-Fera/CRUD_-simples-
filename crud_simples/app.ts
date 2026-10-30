@@ -16,8 +16,8 @@ const secret = Deno.env.get("JWT_secret");
 
 app.use((responser).default);
 app.use(express.json());
-//app.use(morgan("tiny", {immediate: true}));
-//app.use(morgan("short"));
+app.use(morgan("tiny", {immediate: true}));
+app.use(morgan("short"));
 app.use(throwlhos.default.middleware);
 
 export const nomeChecker = function (req: Request, _res: Response, next: NextFunction) {
