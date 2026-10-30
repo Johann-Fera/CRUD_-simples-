@@ -44,8 +44,7 @@ export const qtdChecker = function (req: Request, _res: Response, next: NextFunc
   quantidade = Number(quantidade);
   const errors = rc.check({quantidade});
   if (errors) {
-    const erro = throwlhos.default.err_unprocessableEntity("quantidade inválida",errors);
-    throw erro;
+    throw throwlhos.default.err_unprocessableEntity("quantidade inválida",errors);
   }
   return next();
 };
@@ -59,20 +58,46 @@ export const valChecker = function (req: Request, _res: Response, next: NextFunc
   if (!is.booleanLike(validade)) throw throwlhos.default.err_unprocessableEntity("validade deve ser boolean");
   return next();
 };
-/*
+
 export const idChecker = function (req: Request, _res: Response, next: NextFunction) {
-  let validade:number = req.body?.validade;
-  if (typeof validade === "undefined" ) {
-    validade = req.query?.validade;
-    if (typeof validade === "undefined") return next();
+  let id:string | undefined;
+  if (req.body?._id) {
+    throw throwlhos.default.err_unprocessableEntity("não deve ser enviado id neste body");
   }
-  if (!is.booleanLike(validade)) throw throwlhos.default.err_unprocessableEntity("validade deve ser boolean");
+  if (req.method == 'PUT') {
+    id = req.params?.id;
+    const errors = rc.check({id});
+    if (errors) {
+      throw throwlhos.default.err_unprocessableEntity("id inválido",errors);
+    }
+    return next();
+  }
+  if (req.query?._id) {
+    id = req.query?._id;
+    const errors = rc.check({id});
+    if (errors) {
+      throw throwlhos.default.err_unprocessableEntity("id inválido",errors);
+    }
+    return next();
+  }
   return next();
-  //GET e DELETE é opcional
-  //POST é priobido e PUT é obrigatório
-  //transfer é obrigatório e tem 2
 };
-*/
+
+export const idTransferChecker = function (req: Request, _res: Response, next: NextFunction) {
+  let id:string | undefined;
+  id = req.body?.id_dv;
+  const errors = rc.check({id});
+  if (errors) {
+    throw throwlhos.default.err_unprocessableEntity("id dentro da validade inválido",errors);
+  }
+  id = req.body?.id_fv;
+  const errors2 = rc.check({id});
+  if (errors2) {
+    throw throwlhos.default.err_unprocessableEntity("id fora da validade inválido",errors2);
+  }
+  return next();
+};
+
 export const auth = function (req: Request, _res: Response, next: NextFunction) {
   const header:string = req.headers.authorization;
 
@@ -101,7 +126,7 @@ export const autoADM = function(req: Request, _res: Response, next: NextFunction
     return next();
 }
 
-app.get('/', nomeChecker, qtdChecker, valChecker, async (req: Request, res: Response) => {
+app.get('/', idChecker, nomeChecker, qtdChecker, valChecker, async (req: Request, res: Response) => {
   const {_id, nome, quantidade, validade} = req.query;
   const filter : QueryFilter<typeof comida> = {};
   if (_id) filter._id = _id;
@@ -116,7 +141,7 @@ app.get('/', nomeChecker, qtdChecker, valChecker, async (req: Request, res: Resp
   }
 });
 
-app.post('/comida', auth, autoADM, nomeChecker, qtdChecker, valChecker, async (req: Request, res: Response) => {
+app.post('/comida', auth, autoADM, idChecker, nomeChecker, qtdChecker, valChecker, async (req: Request, res: Response) => {
   const novaComida: typeof comida = req.body;
   try {
     const dados = await saveComida(novaComida);
@@ -126,7 +151,7 @@ app.post('/comida', auth, autoADM, nomeChecker, qtdChecker, valChecker, async (r
   }
 });
 
-app.post('/comida/expirou', auth, autoADM, qtdChecker, async (req: Request, res: Response) => {
+app.post('/comida/expirou', auth, autoADM, idTransferChecker, qtdChecker, async (req: Request, res: Response) => {
   const transfer: OpTransfer = req.body;
   try {
     const dados = await transferirExpirada(transfer);
@@ -136,7 +161,7 @@ app.post('/comida/expirou', auth, autoADM, qtdChecker, async (req: Request, res:
   }
 });
 
-app.put('/comida/:id', auth, autoADM, nomeChecker, qtdChecker, valChecker, async (req: Request, res: Response) => {
+app.put('/comida/:id', auth, autoADM, idChecker, nomeChecker, qtdChecker, valChecker, async (req: Request, res: Response) => {
   const comidaAtualizada: typeof comida = req.body;
   const id: string = req.params.id;
   try {
@@ -147,7 +172,7 @@ app.put('/comida/:id', auth, autoADM, nomeChecker, qtdChecker, valChecker, async
   };
 });
 
-app.delete('/comida', auth, autoADM, nomeChecker, qtdChecker, valChecker, async (req: Request, res: Response) => {
+app.delete('/comida', auth, autoADM, idChecker, nomeChecker, qtdChecker, valChecker, async (req: Request, res: Response) => {
   const {_id, nome, quantidade, validade} = req.query;
   const filter : QueryFilter<typeof comida> = {};
   if (_id) filter._id = _id;

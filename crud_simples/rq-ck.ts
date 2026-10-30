@@ -29,3 +29,8 @@ rc.addRule('header', {
     validator: (header:string) => header.includes("Bearer"),
     message: 'header deve incluir o Bearer',
 })
+
+rc.addRule('id', {
+    validator: (id:string) => is.objectId(id),
+    message: 'id deve ter formato de objectId',
+})

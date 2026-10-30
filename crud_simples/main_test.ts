@@ -1,6 +1,6 @@
 import { assertArrayIncludes, assertEquals, assert, assertExists, assertThrows } from "@std/assert";
 import { connectdb, disconnectFromMongoDB } from "./repository.ts";
-import { app, auth, nomeChecker, qtdChecker, autoADM, valChecker } from "./app.ts";
+import { app, auth, nomeChecker, qtdChecker, autoADM, valChecker, idChecker, idTransferChecker } from "./app.ts";
 import { Response } from 'express';
 import responser from "responser";
 import { IThrowlhos } from "throwlhos";
@@ -284,7 +284,7 @@ Deno.test("testes de autorização", () => {
   assertEquals(nextCalled, false, "next foi chamado");
 })
 
-Deno.test("testes de validade", () => {
+Deno.test("testes de valchecker", () => {
   nextCalled = false;
   const req = {
     method: "PUT",
@@ -297,6 +297,63 @@ Deno.test("testes de validade", () => {
   assertEquals(nextCalled, false, "next foi chamado");
 })
 
+Deno.test("testes dos idcheckers", () => {
+  nextCalled = false;
+  //id em body normal
+  const req = {
+    method: "PUT",
+    headers: {"Content-Type": "application/json"},
+    body: {_id: "asd48awd94a6s1d8a8w"}, 
+  };
+  const err = assertThrows(() => idChecker(req, resResponser, next), "passou body com id") as IThrowlhos;
+  assertEquals(err.message, "não deve ser enviado id neste body", "mensagem errada1");
+  assertEquals(err.code, 422, "não ta retornando o código correto1");
+  assertEquals(nextCalled, false, "next foi chamado1");
+  //sem id em parametro
+  const req2 = {
+    method: "PUT",
+    headers: {"Content-Type": "application/json"},
+    params: {id: ""}, 
+  };
+  const err2 = assertThrows(() => idChecker(req2, resResponser, next), "passou body com id") as IThrowlhos;
+  assertEquals(err2.message, "id inválido", "mensagem errada2");
+  assertArrayIncludes(err2.errors, [ { field: "id", message: "id não fornecido" } ], "não passou pelo motivo errado2");
+  assertEquals(err2.code, 422, "não ta retornando o código correto2");
+  assertEquals(nextCalled, false, "next foi chamado2");
+  //id errado em query
+  const req3 = {
+    method: "DELETE",
+    headers: {"Content-Type": "application/json"},
+    query: {_id: "abobora"}, 
+  };
+  const err3 = assertThrows(() => idChecker(req3, resResponser, next), "passou body com id") as IThrowlhos;
+  assertEquals(err3.message, "id inválido", "mensagem errada3");
+  assertArrayIncludes(err3.errors, [ { field: "id", message: "id deve ter formato de objectId" } ], "não passou pelo motivo errado3");
+  assertEquals(err3.code, 422, "não ta retornando o código correto3");
+  assertEquals(nextCalled, false, "next foi chamado3");
+  //id_dv vazio id_dv
+  const req4 = {
+    method: "PUT",
+    headers: {"Content-Type": "application/json"},
+    body: {id_dv: "", id_fv: "asd48awd94a6s1d8a8w"}, 
+  };
+  const err4 = assertThrows(() => idTransferChecker(req4, resResponser, next), "passou id_dv vazio") as IThrowlhos;
+  assertEquals(err4.message, "id dentro da validade inválido", "mensagem errada4");
+  assertArrayIncludes(err4.errors, [ { field: "id", message: "id não fornecido" } ], "não passou pelo motivo errado4");
+  assertEquals(err4.code, 422, "não ta retornando o código correto4");
+  assertEquals(nextCalled, false, "next foi chamado4");
+  //id_fv formato errado
+  const req5 = {
+    method: "PUT",
+    headers: {"Content-Type": "application/json"},
+    body: {id_dv: "6ae0ab4278df6bcd4ed97b17", id_fv: "bruh"}, 
+  };
+  const err5 = assertThrows(() => idTransferChecker(req5, resResponser, next), "passou id_fv nada ave") as IThrowlhos;
+  assertEquals(err5.message, "id fora da validade inválido", "mensagem errada5");
+  assertArrayIncludes(err5.errors, [ { field: "id", message: "id deve ter formato de objectId" } ], "não passou pelo motivo errado5");
+  assertEquals(err5.code, 422, "não ta retornando o código correto5");
+  assertEquals(nextCalled, false, "next foi chamado5");
+})
 
 /*
 - deletar o que não tem - int
